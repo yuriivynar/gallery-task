@@ -10,33 +10,47 @@ export default function UploadWindow({ isOpen, onClose, userId }) {
     console.log("Selected files:", Array.from(e.target.files).map(file => file.name));
   };
 
+  const sanitizeFileName = (name) =>
+    name.replace(/[^a-zA-Z0-9.\-_а-яА-ЯёЁіІїЇєЄґҐ]/g, "_");
+
   const handleUpload = async () => {
     try {
+      setError(null);
       console.log("User ID:", userId);
-      console.log("Files to upload:", Array.from(files).map(file => file.name));
-      for (const file of files) {
-        const filePath = `user-${userId}/${Date.now()}-${file.name}`;
+      const filesArray = Array.from(files);
+      console.log("Files to upload:", filesArray.map(file => file.name));
+      for (const file of filesArray) {
+        const safeName = sanitizeFileName(file.name);
+        const filePath = `user-${userId}/${Date.now()}-${safeName}`;
         console.log("Uploading to path:", filePath);
         console.log("File object:", file);
+
         const { error: uploadError, data } = await supabase.storage
           .from("user-photos")
           .upload(filePath, file);
+
         console.log("Upload response:", data);
         if (uploadError) {
           console.error("Upload error details:", uploadError);
-          throw uploadError; // Throw the error to catch it below
+          setError(uploadError.message || "Upload failed");
+          return;
         }
 
-        await supabase.from("photos").insert({
+        const { error: dbError } = await supabase.from("photos").insert({
           user_id: userId,
           path: filePath,
         });
+        if (dbError) {
+          console.error("DB insert error:", dbError);
+          setError(dbError.message || "DB insert failed");
+          return;
+        }
       }
       setFiles([]);
       onClose();
       window.location.reload();
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Unknown error");
       console.error("Upload error:", err);
     }
   };
